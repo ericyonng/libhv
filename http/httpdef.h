@@ -81,6 +81,13 @@ enum http_status {
     HTTP_CUSTOM_STATUS
 };
 
+#define HTTP_STATUS_IS_REDIRECT(status)             \
+    (status) == HTTP_STATUS_MOVED_PERMANENTLY   ||  \
+    (status) == HTTP_STATUS_FOUND               ||  \
+    (status) == HTTP_STATUS_SEE_OTHER           ||  \
+    (status) == HTTP_STATUS_TEMPORARY_REDIRECT  ||  \
+    (status) == HTTP_STATUS_PERMANENT_REDIRECT
+
 // http_mehtod
 // XX(num, name, string)
 #define HTTP_METHOD_MAP(XX)         \
@@ -142,6 +149,7 @@ enum http_method {
     XX(TEXT_PLAIN,              text/plain,               txt)          \
     XX(TEXT_HTML,               text/html,                html)         \
     XX(TEXT_CSS,                text/css,                 css)          \
+    XX(TEXT_EVENT_STREAM,       text/event-stream,        sse)          \
     XX(IMAGE_JPEG,              image/jpeg,               jpg)          \
     XX(IMAGE_PNG,               image/png,                png)          \
     XX(IMAGE_GIF,               image/gif,                gif)          \

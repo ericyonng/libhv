@@ -51,7 +51,12 @@ int main(int argc, char** argv) {
     }
     int port = atoi(argv[1]);
 
-    WebSocketServerCallbacks ws;
+    HttpService http;
+    http.GET("/ping", [](const HttpContextPtr& ctx) {
+        return ctx->send("pong");
+    });
+
+    WebSocketService ws;
     ws.onopen = [](const WebSocketChannelPtr& channel, const std::string& url) {
         printf("onopen: GET %s\n", url.c_str());
         MyContext* ctx = channel->newContext<MyContext>();
@@ -84,12 +89,18 @@ int main(int argc, char** argv) {
     memset(&param, 0, sizeof(param));
     param.crt_file = "cert/server.crt";
     param.key_file = "cert/server.key";
+    param.endpoint = HSSL_SERVER;
     if (hssl_ctx_init(&param) == NULL) {
-        fprintf(stderr, "SSL certificate verify failed!\n");
+        fprintf(stderr, "hssl_ctx_init failed!\n");
         return -20;
     }
 #endif
+    server.service = &http;
     server.ws = &ws;
-    websocket_server_run(&server);
+    websocket_server_run(&server, 0);
+
+    // press Enter to stop
+    while (getchar() != '\n');
+    websocket_server_stop(&server);
     return 0;
 }

@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
 
     router.GET("/data", [](HttpRequest* req, HttpResponse* resp) {
         static char data[] = "0123456789";
-        return resp->Data(data, 10);
+        return resp->Data(data, 10 /*, false */);
     });
 
     router.GET("/paths", [&router](HttpRequest* req, HttpResponse* resp) {
@@ -53,10 +53,8 @@ int main(int argc, char** argv) {
         return 200;
     });
 
-    router.POST("/echo", [](HttpRequest* req, HttpResponse* resp) {
-        resp->content_type = req->content_type;
-        resp->body = req->body;
-        return 200;
+    router.POST("/echo", [](const HttpContextPtr& ctx) {
+        return ctx->send(ctx->body(), ctx->type());
     });
 
     http_server_t server;
@@ -68,8 +66,9 @@ int main(int argc, char** argv) {
     memset(&param, 0, sizeof(param));
     param.crt_file = "cert/server.crt";
     param.key_file = "cert/server.key";
+    param.endpoint = HSSL_SERVER;
     if (hssl_ctx_init(&param) == NULL) {
-        fprintf(stderr, "SSL certificate verify failed!\n");
+        fprintf(stderr, "hssl_ctx_init failed!\n");
         return -20;
     }
 #endif
@@ -79,13 +78,10 @@ int main(int argc, char** argv) {
     // uncomment to test multi-threads
     // server.worker_threads = 4;
 
-#if 1
-    http_server_run(&server);
-#else
-    // test http_server_stop
     http_server_run(&server, 0);
-    hv_sleep(10);
+
+    // press Enter to stop
+    while (getchar() != '\n');
     http_server_stop(&server);
-#endif
     return 0;
 }

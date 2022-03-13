@@ -129,10 +129,6 @@ else
 	CPPFLAGS += -DNDEBUG
 endif
 
-ifeq ($(ENABLE_IPV6), yes)
-	CPPFLAGS += -DENABLE_IPV6
-endif
-
 ifeq ($(ENABLE_UDS), yes)
 	CPPFLAGS += -DENABLE_UDS
 endif
@@ -167,9 +163,14 @@ ifeq ($(WITH_OPENSSL), yes)
 	CPPFLAGS += -DWITH_OPENSSL
 	LDFLAGS += -lssl -lcrypto
 else
+ifeq ($(WITH_GNUTLS), yes)
+	CPPFLAGS += -DWITH_GNUTLS
+	LDFLAGS += -lgnutls
+else
 ifeq ($(WITH_MBEDTLS), yes)
 	CPPFLAGS += -DWITH_MBEDTLS
 	LDFLAGS += -lmbedtls -lmbedx509 -lmbedcrypto
+endif
 endif
 endif
 
@@ -192,6 +193,10 @@ ifneq ($(findstring gcc, $(CC_VERSION)), )
 	LDFLAGS += -lrt # for clock_gettime, clang not -lrt
 endif
 endif
+endif
+
+ifeq ($(OS), Darwin)
+	LDFLAGS += -framework CoreFoundation -framework Security
 endif
 
 ALL_SRCS += $(foreach dir, $(SRCDIRS), $(wildcard $(dir)/*.c $(dir)/*.cc $(dir)/*.cpp))

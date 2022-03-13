@@ -6,6 +6,10 @@
 
 #include "hatomic.h"
 
+#ifndef RAND_MAX
+#define RAND_MAX 2147483647
+#endif
+
 static hatomic_t s_alloc_cnt = HATOMIC_VAR_INIT(0);
 static hatomic_t s_free_cnt = HATOMIC_VAR_INIT(0);
 
@@ -191,7 +195,7 @@ int hv_mkdir_p(const char* dir) {
     if (access(dir, 0) == 0) {
         return EEXIST;
     }
-    char tmp[MAX_PATH];
+    char tmp[MAX_PATH] = {0};
     safe_strncpy(tmp, dir, sizeof(tmp));
     char* p = tmp;
     char delim = '/';
@@ -221,7 +225,7 @@ int hv_rmdir_p(const char* dir) {
     if (rmdir(dir) != 0) {
         return EPERM;
     }
-    char tmp[MAX_PATH];
+    char tmp[MAX_PATH] = {0};
     safe_strncpy(tmp, dir, sizeof(tmp));
     char* p = tmp;
     while (*p) ++p;
@@ -238,6 +242,45 @@ int hv_rmdir_p(const char* dir) {
         }
     }
     return 0;
+}
+
+bool hv_exists(const char* path) {
+    return access(path, 0) == 0;
+}
+
+bool hv_isdir(const char* path) {
+    if (access(path, 0) != 0) return false;
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+    stat(path, &st);
+    return S_ISDIR(st.st_mode);
+}
+
+bool hv_isfile(const char* path) {
+    if (access(path, 0) != 0) return false;
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+    stat(path, &st);
+    return S_ISREG(st.st_mode);
+}
+
+bool hv_islink(const char* path) {
+#ifdef OS_WIN
+    return hv_isdir(path) && (GetFileAttributes(path) & FILE_ATTRIBUTE_REPARSE_POINT);
+#else
+    if (access(path, 0) != 0) return false;
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+    lstat(path, &st);
+    return S_ISLNK(st.st_mode);
+#endif
+}
+
+size_t hv_filesize(const char* filepath) {
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+    stat(filepath, &st);
+    return st.st_size;
 }
 
 bool getboolean(const char* str) {
@@ -268,7 +311,7 @@ char* get_executable_path(char* buf, int size) {
 }
 
 char* get_executable_dir(char* buf, int size) {
-    char filepath[MAX_PATH];
+    char filepath[MAX_PATH] = {0};
     get_executable_path(filepath, sizeof(filepath));
     char* pos = strrchr_dir(filepath);
     if (pos) {
@@ -279,7 +322,7 @@ char* get_executable_dir(char* buf, int size) {
 }
 
 char* get_executable_file(char* buf, int size) {
-    char filepath[MAX_PATH];
+    char filepath[MAX_PATH] = {0};
     get_executable_path(filepath, sizeof(filepath));
     char* pos = strrchr_dir(filepath);
     if (pos) {
@@ -290,4 +333,31 @@ char* get_executable_file(char* buf, int size) {
 
 char* get_run_dir(char* buf, int size) {
     return getcwd(buf, size);
+}
+
+int hv_rand(int min, int max) {
+    static int s_seed = 0;
+    assert(max > min);
+
+    if (s_seed == 0) {
+        s_seed = time(NULL);
+        srand(s_seed);
+    }
+
+    int _rand = rand();
+    _rand = min + (int) ((double) ((double) (max) - (min) + 1.0) * ((_rand) / ((RAND_MAX) + 1.0)));
+    return _rand;
+}
+
+void hv_random_string(char *buf, int len) {
+    static char s_characters[] = {
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U',
+        'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+        'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+    };
+    int i = 0;
+    for (; i < len; i++) {
+        buf[i] = s_characters[hv_rand(0, sizeof(s_characters) - 1)];
+    }
+    buf[i] = '\0';
 }

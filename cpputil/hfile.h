@@ -4,7 +4,6 @@
 #include <string> // for std::string
 
 #include "hplatform.h" // for stat
-#include "hdef.h" // for LF, CR
 #include "hbuf.h" // for HBuf
 
 class HFile {
@@ -31,6 +30,10 @@ public:
         }
     }
 
+    bool isopen() {
+        return fp != NULL;
+    }
+
     size_t read(void* ptr, size_t len) {
         return fread(ptr, 1, len, fp);
     }
@@ -39,21 +42,43 @@ public:
         return fwrite(ptr, 1, len, fp);
     }
 
-    size_t size() {
+    size_t write(const std::string& str) {
+        return write(str.c_str(), str.length());
+    }
+
+    int seek(size_t offset, int whence = SEEK_SET) {
+        return fseek(fp, offset, whence);
+    }
+
+    int tell() {
+        return ftell(fp);
+    }
+
+    int flush() {
+        return fflush(fp);
+    }
+
+    static size_t size(const char* filepath) {
         struct stat st;
         memset(&st, 0, sizeof(st));
         stat(filepath, &st);
         return st.st_size;
     }
 
+    size_t size() {
+        return HFile::size(filepath);
+    }
+
     size_t readall(HBuf& buf) {
         size_t filesize = size();
+        if (filesize == 0) return 0;
         buf.resize(filesize);
         return fread(buf.base, 1, filesize, fp);
     }
 
     size_t readall(std::string& str) {
         size_t filesize = size();
+        if (filesize == 0) return 0;
         str.resize(filesize);
         return fread((void*)str.data(), 1, filesize, fp);
     }
@@ -62,14 +87,14 @@ public:
         str.clear();
         char ch;
         while (fread(&ch, 1, 1, fp)) {
-            if (ch == LF) {
+            if (ch == '\n') {
                 // unix: LF
                 return true;
             }
-            if (ch == CR) {
+            if (ch == '\r') {
                 // dos: CRLF
                 // read LF
-                if (fread(&ch, 1, 1, fp) && ch != LF) {
+                if (fread(&ch, 1, 1, fp) && ch != '\n') {
                     // mac: CR
                     fseek(fp, -1, SEEK_CUR);
                 }
@@ -82,6 +107,7 @@ public:
 
     int readrange(std::string& str, size_t from = 0, size_t to = 0) {
         size_t filesize = size();
+        if (filesize == 0) return 0;
         if (to == 0 || to >= filesize) to = filesize - 1;
         size_t readbytes = to - from + 1;
         str.resize(readbytes);

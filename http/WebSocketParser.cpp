@@ -13,12 +13,12 @@ static int on_frame_header(websocket_parser* parser) {
         wp->opcode = opcode;
     }
     int length = parser->length;
-    int reserve_length = MIN(length, MAX_PAYLOAD_LENGTH);
+    int reserve_length = MIN(length + 1, MAX_PAYLOAD_LENGTH);
     if (reserve_length > wp->message.capacity()) {
         wp->message.reserve(reserve_length);
     }
     if (wp->state == WS_FRAME_BEGIN ||
-        wp->state == WS_FRAME_END) {
+        wp->state == WS_FRAME_FIN) {
         wp->message.clear();
     }
     wp->state = WS_FRAME_HEADER;
@@ -41,6 +41,7 @@ static int on_frame_end(websocket_parser* parser) {
     WebSocketParser* wp = (WebSocketParser*)parser->data;
     wp->state = WS_FRAME_END;
     if (wp->parser->flags & WS_FIN) {
+        wp->state = WS_FRAME_FIN;
         if (wp->onMessage) {
             wp->onMessage(wp->opcode, wp->message);
         }
@@ -48,16 +49,13 @@ static int on_frame_end(websocket_parser* parser) {
     return 0;
 }
 
-websocket_parser_settings* WebSocketParser::cbs = NULL;
+websocket_parser_settings WebSocketParser::cbs = {
+    on_frame_header,
+    on_frame_body,
+    on_frame_end
+};
 
 WebSocketParser::WebSocketParser() {
-    if (cbs == NULL) {
-        cbs = (websocket_parser_settings*)malloc(sizeof(websocket_parser_settings));
-        websocket_parser_settings_init(cbs);
-        cbs->on_frame_header = on_frame_header;
-        cbs->on_frame_body = on_frame_body;
-        cbs->on_frame_end = on_frame_end;
-    }
     parser = (websocket_parser*)malloc(sizeof(websocket_parser));
     websocket_parser_init(parser);
     parser->data = this;
@@ -72,5 +70,5 @@ WebSocketParser::~WebSocketParser() {
 }
 
 int WebSocketParser::FeedRecvData(const char* data, size_t len) {
-    return websocket_parser_execute(parser, cbs, data, len);
+    return websocket_parser_execute(parser, &cbs, data, len);
 }

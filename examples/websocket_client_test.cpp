@@ -20,9 +20,8 @@ int main(int argc, char** argv) {
     const char* url = argv[1];
 
     WebSocketClient ws;
-    ws.onopen = [&ws]() {
+    ws.onopen = []() {
         printf("onopen\n");
-        ws.send("hello");
     };
     ws.onclose = []() {
         printf("onclose\n");
@@ -32,14 +31,25 @@ int main(int argc, char** argv) {
     };
 
     // reconnect: 1,2,4,8,10,10,10...
-    ReconnectInfo reconn;
+    reconn_setting_t reconn;
     reconn.min_delay = 1000;
     reconn.max_delay = 10000;
     reconn.delay_policy = 2;
     ws.setReconnect(&reconn);
 
-    ws.open(url);
+    http_headers headers;
+    headers["Origin"] = "http://example.com/";
+    ws.open(url, headers);
 
-    while (1) hv_delay(1000);
+    std::string str;
+    while (std::getline(std::cin, str)) {
+        if (!ws.isConnected()) break;
+        if (str == "quit") {
+            ws.close();
+            break;
+        }
+        ws.send(str);
+    }
+
     return 0;
 }

@@ -26,6 +26,17 @@
  */
 #define TEST_SSL 0
 
+/*
+ * @test    kcp_client
+ * #define  TEST_KCP 1
+ *
+ * @build   ./configure --with-kcp && make clean && make
+ * @server  bin/udp_echo_server 1234
+ * @client  bin/nc -u 127.0.0.1 1234
+ *
+ */
+#define TEST_KCP 0
+
 #define RECV_BUFSIZE    8192
 static char recvbuf[RECV_BUFSIZE];
 
@@ -38,14 +49,14 @@ hio_t*      sockio = NULL;
 
 int verbose = 0;
 
-void send_heartbeat(hio_t* io) {
+static void send_heartbeat(hio_t* io) {
     static char buf[] = "PING\r\n";
     // printf("send_heartbeat %s", buf);
     hio_write(io, buf, 6);
 }
 
-void on_recv(hio_t* io, void* buf, int readbytes) {
-    //printf("on_recv fd=%d readbytes=%d\n", hio_fd(io), readbytes);
+static void on_recv(hio_t* io, void* buf, int readbytes) {
+    // printf("on_recv fd=%d readbytes=%d\n", hio_fd(io), readbytes);
     if (verbose) {
         char localaddrstr[SOCKADDR_STRLEN] = {0};
         char peeraddrstr[SOCKADDR_STRLEN] = {0};
@@ -69,9 +80,9 @@ void on_recv(hio_t* io, void* buf, int readbytes) {
     fflush(stdout);
 }
 
-void on_stdin(hio_t* io, void* buf, int readbytes) {
-    //printf("on_stdin fd=%d readbytes=%d\n", hio_fd(io), readbytes);
-    //printf("> %s\n", buf);
+static void on_stdin(hio_t* io, void* buf, int readbytes) {
+    // printf("on_stdin fd=%d readbytes=%d\n", hio_fd(io), readbytes);
+    // printf("> %s\n", buf);
 
     char* str = (char*)buf;
 
@@ -113,15 +124,22 @@ void on_stdin(hio_t* io, void* buf, int readbytes) {
     }
 
     hio_write(sockio, buf, readbytes);
+
+#if TEST_KCP
+    if (strncmp(str, "CLOSE", 5) == 0) {
+        printf("call hio_close\n");
+        hio_close(sockio);
+    }
+#endif
 }
 
-void on_close(hio_t* io) {
-    //printf("on_close fd=%d error=%d\n", hio_fd(io), hio_error(io));
+static void on_close(hio_t* io) {
+    // printf("on_close fd=%d error=%d\n", hio_fd(io), hio_error(io));
     hio_del(stdinio, HV_READ);
 }
 
-void on_connect(hio_t* io) {
-    //printf("on_connect fd=%d\n", hio_fd(io));
+static void on_connect(hio_t* io) {
+    // printf("on_connect fd=%d\n", hio_fd(io));
     if (verbose) {
         char localaddrstr[SOCKADDR_STRLEN] = {0};
         char peeraddrstr[SOCKADDR_STRLEN] = {0};
@@ -189,6 +207,17 @@ Examples: nc 127.0.0.1 80\n\
     else if (protocol == 2) {
         // udp
         sockio = hloop_create_udp_client(loop, host, port);
+#if TEST_KCP
+        static kcp_setting_t s_kcp_setting;
+        memset(&s_kcp_setting, 0, sizeof(kcp_setting_t));
+        s_kcp_setting.conv = 123456;
+        // fast mode
+        s_kcp_setting.nodelay = 1;
+        s_kcp_setting.interval = 10;
+        s_kcp_setting.fastresend = 2;
+        s_kcp_setting.nocwnd = 1;
+        hio_set_kcp(sockio, &s_kcp_setting);
+#endif
         hio_read(sockio);
     }
     if (sockio == NULL) {

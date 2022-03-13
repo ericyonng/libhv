@@ -1,9 +1,7 @@
 /*
  * TcpServer_test.cpp
  *
- * @build
- * make libhv && sudo make install
- * g++ -std=c++11 TcpServer_test.cpp -o TcpServer_test -I/usr/local/include/hv -lhv -lpthread
+ * @build: make evpp
  *
  */
 
@@ -18,6 +16,8 @@ int main(int argc, char* argv[]) {
     }
     int port = atoi(argv[1]);
 
+    hlog_set_level(LOG_LEVEL_DEBUG);
+
     TcpServer srv;
     int listenfd = srv.createsocket(port);
     if (listenfd < 0) {
@@ -27,9 +27,9 @@ int main(int argc, char* argv[]) {
     srv.onConnection = [](const SocketChannelPtr& channel) {
         std::string peeraddr = channel->peeraddr();
         if (channel->isConnected()) {
-            printf("%s connected! connfd=%d\n", peeraddr.c_str(), channel->fd());
+            printf("%s connected! connfd=%d id=%d tid=%ld\n", peeraddr.c_str(), channel->fd(), channel->id(), currentThreadEventLoop->tid());
         } else {
-            printf("%s disconnected! connfd=%d\n", peeraddr.c_str(), channel->fd());
+            printf("%s disconnected! connfd=%d id=%d tid=%ld\n", peeraddr.c_str(), channel->fd(), channel->id(), currentThreadEventLoop->tid());
         }
     };
     srv.onMessage = [](const SocketChannelPtr& channel, Buffer* buf) {
@@ -37,12 +37,11 @@ int main(int argc, char* argv[]) {
         printf("< %.*s\n", (int)buf->size(), (char*)buf->data());
         channel->write(buf);
     };
-    srv.onWriteComplete = [](const SocketChannelPtr& channel, Buffer* buf) {
-        printf("> %.*s\n", (int)buf->size(), (char*)buf->data());
-    };
     srv.setThreadNum(4);
     srv.start();
 
-    while (1) hv_sleep(1);
+    // press Enter to stop
+    while (getchar() != '\n');
+
     return 0;
 }

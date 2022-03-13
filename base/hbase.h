@@ -31,6 +31,23 @@ HV_EXPORT void  safe_free(void* ptr);
         }\
     } while(0)
 
+#define STACK_OR_HEAP_ALLOC(ptr, size, stack_size)\
+    unsigned char _stackbuf_[stack_size] = { 0 };\
+    if ((size) > (stack_size)) {\
+        HV_ALLOC(ptr, size);\
+    } else {\
+        *(unsigned char**)&(ptr) = _stackbuf_;\
+    }
+
+#define STACK_OR_HEAP_FREE(ptr)\
+    if ((unsigned char*)(ptr) != _stackbuf_) {\
+        HV_FREE(ptr);\
+    }
+
+#define HV_DEFAULT_STACKBUF_SIZE    1024
+#define HV_STACK_ALLOC(ptr, size)   STACK_OR_HEAP_ALLOC(ptr, size, HV_DEFAULT_STACKBUF_SIZE)
+#define HV_STACK_FREE(ptr)          STACK_OR_HEAP_FREE(ptr)
+
 HV_EXPORT long hv_alloc_cnt();
 HV_EXPORT long hv_free_cnt();
 HV_INLINE void hv_memcheck() {
@@ -73,6 +90,12 @@ HV_EXPORT const char* hv_suffixname(const char* filename);
 HV_EXPORT int hv_mkdir_p(const char* dir);
 // rmdir -p
 HV_EXPORT int hv_rmdir_p(const char* dir);
+// path
+HV_EXPORT bool hv_exists(const char* path);
+HV_EXPORT bool hv_isdir(const char* path);
+HV_EXPORT bool hv_isfile(const char* path);
+HV_EXPORT bool hv_islink(const char* path);
+HV_EXPORT size_t hv_filesize(const char* filepath);
 
 // 1 y on yes true enable
 HV_EXPORT bool getboolean(const char* str);
@@ -81,6 +104,10 @@ HV_EXPORT char* get_executable_path(char* buf, int size);
 HV_EXPORT char* get_executable_dir(char* buf, int size);
 HV_EXPORT char* get_executable_file(char* buf, int size);
 HV_EXPORT char* get_run_dir(char* buf, int size);
+
+// random
+HV_EXPORT int   hv_rand(int min, int max);
+HV_EXPORT void  hv_random_string(char *buf, int len);
 
 END_EXTERN_C
 

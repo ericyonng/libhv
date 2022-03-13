@@ -1,4 +1,5 @@
 #include "hv.h"
+#include "hssl.h"
 #include "hmain.h"
 #include "iniparser.h"
 
@@ -6,8 +7,8 @@
 
 #include "router.h"
 
-http_server_t   g_http_server;
-HttpService     g_http_service;
+hv::HttpServer  g_http_server;
+hv::HttpService g_http_service;
 
 static void print_version();
 static void print_help();
@@ -55,7 +56,7 @@ int parse_confile(const char* confile) {
     }
 
     // logfile
-    string str = ini.GetValue("logfile");
+    std::string str = ini.GetValue("logfile");
     if (!str.empty()) {
         strncpy(g_main_ctx.logfile, str.c_str(), sizeof(g_main_ctx.logfile));
     }
@@ -85,6 +86,10 @@ int parse_confile(const char* confile) {
 
     // worker_processes
     int worker_processes = 0;
+#ifdef DEBUG
+    // Disable multi-processes mode for debugging
+    worker_processes = 0;
+#else
     str = ini.GetValue("worker_processes");
     if (str.size() != 0) {
         if (strcmp(str.c_str(), "auto") == 0) {
@@ -95,10 +100,21 @@ int parse_confile(const char* confile) {
             worker_processes = atoi(str.c_str());
         }
     }
+#endif
     g_http_server.worker_processes = LIMIT(0, worker_processes, MAXNUM_WORKER_PROCESSES);
     // worker_threads
-    int worker_threads = ini.Get<int>("worker_threads");
-    g_http_server.worker_threads = LIMIT(0, worker_threads, 16);
+    int worker_threads = 0;
+    str = ini.GetValue("worker_threads");
+    if (str.size() != 0) {
+        if (strcmp(str.c_str(), "auto") == 0) {
+            worker_threads = get_ncpu();
+            hlogd("worker_threads=ncpu=%d", worker_threads);
+        }
+        else {
+            worker_threads = atoi(str.c_str());
+        }
+    }
+    g_http_server.worker_threads = LIMIT(0, worker_threads, 64);
 
     // http_port
     int port = 0;
@@ -152,11 +168,13 @@ int parse_confile(const char* confile) {
         std::string crt_file = ini.GetValue("ssl_certificate");
         std::string key_file = ini.GetValue("ssl_privatekey");
         std::string ca_file = ini.GetValue("ssl_ca_certificate");
+        hlogi("SSL backend is %s", hssl_backend());
         hssl_ctx_init_param_t param;
         memset(&param, 0, sizeof(param));
         param.crt_file = crt_file.c_str();
         param.key_file = key_file.c_str();
         param.ca_file = ca_file.c_str();
+        param.endpoint = HSSL_SERVER;
         if (hssl_ctx_init(&param) == NULL) {
             hloge("SSL certificate verify failed!");
             exit(0);
@@ -184,26 +202,6 @@ int main(int argc, char** argv) {
         print_help();
         exit(ret);
     }
-
-    /*
-    printf("---------------arg------------------------------\n");
-    printf("%s\n", g_main_ctx.cmdline);
-    for (auto& pair : g_main_ctx.arg_kv) {
-        printf("%s=%s\n", pair.first.c_str(), pair.second.c_str());
-    }
-    for (auto& item : g_main_ctx.arg_list) {
-        printf("%s\n", item.c_str());
-    }
-    printf("================================================\n");
-    */
-
-    /*
-    printf("---------------env------------------------------\n");
-    for (auto& pair : g_main_ctx.env_kv) {
-        printf("%s=%s\n", pair.first.c_str(), pair.second.c_str());
-    }
-    printf("================================================\n");
-    */
 
     // help
     if (get_arg("h")) {
@@ -254,7 +252,7 @@ int main(int argc, char** argv) {
 
     // http_server
     Router::Register(g_http_service);
-    g_http_server.service = &g_http_service;
-    ret = http_server_run(&g_http_server);
+    g_http_server.registerHttpService(&g_http_service);
+    g_http_server.run();
     return ret;
 }

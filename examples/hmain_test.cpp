@@ -78,7 +78,7 @@ int parse_confile(const char* confile) {
     }
 
     // logfile
-    string str = g_conf_ctx.parser->GetValue("logfile");
+    std::string str = g_conf_ctx.parser->GetValue("logfile");
     if (!str.empty()) {
         strncpy(g_main_ctx.logfile, str.c_str(), sizeof(g_main_ctx.logfile));
     }
@@ -109,6 +109,10 @@ int parse_confile(const char* confile) {
 
     // worker_processes
     int worker_processes = 0;
+#ifdef DEBUG
+    // Disable multi-processes mode for debugging
+    worker_processes = 0;
+#else
     str = g_conf_ctx.parser->GetValue("worker_processes");
     if (str.size() != 0) {
         if (strcmp(str.c_str(), "auto") == 0) {
@@ -119,10 +123,21 @@ int parse_confile(const char* confile) {
             worker_processes = atoi(str.c_str());
         }
     }
+#endif
     g_conf_ctx.worker_processes = LIMIT(0, worker_processes, MAXNUM_WORKER_PROCESSES);
     // worker_threads
-    int worker_threads = g_conf_ctx.parser->Get<int>("worker_threads");
-    g_conf_ctx.worker_threads = LIMIT(0, worker_threads, 16);
+    int worker_threads = 0;
+    str = g_conf_ctx.parser->GetValue("worker_threads");
+    if (str.size() != 0) {
+        if (strcmp(str.c_str(), "auto") == 0) {
+            worker_threads = get_ncpu();
+            hlogd("worker_threads=ncpu=%d", worker_threads);
+        }
+        else {
+            worker_threads = atoi(str.c_str());
+        }
+    }
+    g_conf_ctx.worker_threads = LIMIT(0, worker_threads, 64);
 
     // port
     int port = 0;
@@ -165,17 +180,17 @@ int main(int argc, char** argv) {
     /*
     printf("---------------arg------------------------------\n");
     printf("%s\n", g_main_ctx.cmdline);
-    for (auto& pair : g_main_ctx.arg_kv) {
-        printf("%s=%s\n", pair.first.c_str(), pair.second.c_str());
+    for (int i = 0; i < g_main_ctx.arg_kv_size; ++i) {
+        printf("%s\n", g_main_ctx.arg_kv[i]);
     }
-    for (auto& item : g_main_ctx.arg_list) {
-        printf("%s\n", item.c_str());
+    for (int i = 0; i < g_main_ctx.arg_list_size; ++i) {
+        printf("%s\n", g_main_ctx.arg_list[i]);
     }
     printf("================================================\n");
 
     printf("---------------env------------------------------\n");
-    for (auto& pair : g_main_ctx.env_kv) {
-        printf("%s=%s\n", pair.first.c_str(), pair.second.c_str());
+    for (int i = 0; i < g_main_ctx.envc; ++i) {
+        printf("%s\n", g_main_ctx.save_envp[i]);
     }
     printf("================================================\n");
     */

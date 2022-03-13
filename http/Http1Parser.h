@@ -12,13 +12,15 @@ enum http_parser_state {
     HP_HEADER_FIELD,
     HP_HEADER_VALUE,
     HP_HEADERS_COMPLETE,
+    HP_CHUNK_HEADER,
     HP_BODY,
+    HP_CHUNK_COMPLETE,
     HP_MESSAGE_COMPLETE
 };
 
 class Http1Parser : public HttpParser {
 public:
-    static http_parser_settings*    cbs;
+    static http_parser_settings     cbs;
     http_parser                     parser;
     int                             flags;
     http_parser_state               state;
@@ -35,16 +37,13 @@ public:
 
     void handle_header() {
         if (header_field.size() != 0 && header_value.size() != 0) {
-#if 0
-            if (stricmp(header_field.c_str(), "Set-CooKie") == 0) {
-                // combine multiple Set-Cookie
-                std::string cookie = parsed->GetHeader("Set-Cookie");
-                if (!cookie.empty()) {
-                    header_value += "; ";
-                    header_value += cookie;
+            if (stricmp(header_field.c_str(), "Set-CooKie") == 0 ||
+                stricmp(header_field.c_str(), "Cookie") == 0) {
+                HttpCookie cookie;
+                if (cookie.parse(header_value)) {
+                    parsed->cookies.emplace_back(cookie);
                 }
             }
-#endif
             parsed->headers[header_field] = header_value;
             header_field.clear();
             header_value.clear();
@@ -65,7 +64,7 @@ public:
     }
 
     virtual int FeedRecvData(const char* data, size_t len) {
-        return http_parser_execute(&parser, cbs, data, len);
+        return http_parser_execute(&parser, &cbs, data, len);
     }
 
     virtual int  GetState() {

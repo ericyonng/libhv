@@ -9,6 +9,9 @@
 #include "HttpMessage.h"
 #include "HttpParser.h"
 
+#define DEFAULT_FAIL_RETRY_COUNT  3
+#define DEFAULT_FAIL_RETRY_DELAY  1000  // ms
+
 // async => keepalive => connect_pool
 
 namespace hv {
@@ -53,8 +56,9 @@ struct HttpClientTask {
     HttpRequestPtr          req;
     HttpResponseCallback    cb;
 
-    uint64_t  start_time;
-    int       retry_cnt;
+    uint64_t    start_time;
+    int         retry_cnt;
+    int         retry_delay;
 };
 typedef std::shared_ptr<HttpClientTask> HttpClientTaskPtr;
 
@@ -104,16 +108,18 @@ public:
         loop_thread.start(true);
     }
     ~AsyncHttpClient() {
-        loop_thread.stop(true);
+        // NOTE: ~EventLoopThread will stop and join
+        // loop_thread.stop(true);
     }
 
     // thread-safe
     int send(const HttpRequestPtr& req, HttpResponseCallback resp_cb) {
         HttpClientTaskPtr task(new HttpClientTask);
         task->req = req;
-        task->cb = resp_cb;
+        task->cb = std::move(resp_cb);
         task->start_time = hloop_now_hrtime(loop_thread.hloop());
-        task->retry_cnt = 3;
+        task->retry_delay = DEFAULT_FAIL_RETRY_DELAY;
+        task->retry_cnt = MIN(DEFAULT_FAIL_RETRY_COUNT, req->timeout * 1000 / task->retry_delay - 1);
         return send(task);
     }
 
@@ -154,12 +160,12 @@ protected:
     }
 
 private:
-    EventLoopThread                         loop_thread;
     // NOTE: just one loop thread, no need mutex.
     // fd => SocketChannelPtr
     std::map<int, SocketChannelPtr>         channels;
     // peeraddr => ConnPool
     std::map<std::string, ConnPool<int>>    conn_pools;
+    EventLoopThread                         loop_thread;
 };
 
 }

@@ -1,6 +1,7 @@
 #include "HttpServer.h"
 
 #include "hv.h"
+#include "hssl.h"
 #include "hmain.h"
 
 #include "httpdef.h"
@@ -40,10 +41,10 @@ static void websocket_heartbeat(hio_t* io) {
     WebSocketHandler* ws = handler->ws.get();
     if (ws->last_recv_pong_time < ws->last_send_ping_time) {
         hlogw("[%s:%d] websocket no pong!", handler->ip, handler->port);
-        hio_close(io);
+        ws->channel->close(true);
     } else {
         // printf("send ping\n");
-        hio_write(io, WS_SERVER_PING_FRAME, WS_SERVER_MIN_FRAME_SIZE);
+        ws->channel->sendPing();
         ws->last_send_ping_time = gethrtime_us();
     }
 }
@@ -53,12 +54,12 @@ static void websocket_onmessage(int opcode, const std::string& msg, hio_t* io) {
     WebSocketHandler* ws = handler->ws.get();
     switch(opcode) {
     case WS_OPCODE_CLOSE:
-        hio_close(io);
+        ws->channel->close(true);
         break;
     case WS_OPCODE_PING:
         // printf("recv ping\n");
         // printf("send pong\n");
-        hio_write(io, WS_SERVER_PONG_FRAME, WS_SERVER_MIN_FRAME_SIZE);
+        ws->channel->sendPong();
         break;
     case WS_OPCODE_PONG:
         // printf("recv pong\n");
@@ -103,12 +104,11 @@ static void on_recv(hio_t* io, void* _buf, int readbytes) {
         if (strncmp((char*)buf, HTTP2_MAGIC, MIN(readbytes, HTTP2_MAGIC_LEN)) == 0) {
             http_version = 2;
         }
-        if (!handler->Init(http_version)) {
+        if (!handler->Init(http_version, io)) {
             hloge("[%s:%d] unsupported HTTP%d", handler->ip, handler->port, http_version);
             hio_close(io);
             return;
         }
-        handler->writer.reset(new HttpResponseWriter(io, handler->resp));
     }
 
     int nfeed = handler->FeedRecvData(buf, readbytes);
@@ -217,11 +217,14 @@ static void on_recv(hio_t* io, void* _buf, int readbytes) {
     // switch protocol to websocket
     if (upgrade && upgrade_protocol == HttpHandler::WEBSOCKET) {
         WebSocketHandler* ws = handler->SwitchWebSocket();
-        ws->channel.reset(new WebSocketChannel(io, WS_SERVER));
+        ws->Init(io);
         ws->parser->onMessage = std::bind(websocket_onmessage, std::placeholders::_1, std::placeholders::_2, io);
         // NOTE: cancel keepalive timer, judge alive by heartbeat.
         hio_set_keepalive_timeout(io, 0);
-        hio_set_heartbeat(io, HIO_DEFAULT_HEARTBEAT_INTERVAL, websocket_heartbeat);
+        if (handler->ws_service && handler->ws_service->ping_interval > 0) {
+            int ping_interval = MAX(handler->ws_service->ping_interval, 1000);
+            hio_set_heartbeat(io, ping_interval, websocket_heartbeat);
+        }
         // onopen
         handler->WebSocketOnOpen();
         return;
@@ -245,6 +248,8 @@ static void on_close(hio_t* io) {
 }
 
 static void on_accept(hio_t* io) {
+    http_server_t* server = (http_server_t*)hevent_userdata(io);
+    HttpService* service = server->service;
     /*
     printf("on_accept connfd=%d\n", hio_fd(io));
     char localaddrstr[SOCKADDR_STRLEN] = {0};
@@ -257,20 +262,20 @@ static void on_accept(hio_t* io) {
     hio_setcb_close(io, on_close);
     hio_setcb_read(io, on_recv);
     hio_read(io);
-    hio_set_keepalive_timeout(io, HIO_DEFAULT_KEEPALIVE_TIMEOUT);
+    hio_set_keepalive_timeout(io, service->keepalive_timeout);
+
     // new HttpHandler, delete on_close
     HttpHandler* handler = new HttpHandler;
     // ssl
-    handler->ssl = hio_type(io) == HIO_TYPE_SSL;
+    handler->ssl = hio_is_ssl(io);
     // ip
     sockaddr_ip((sockaddr_u*)hio_peeraddr(io), handler->ip, sizeof(handler->ip));
     // port
     handler->port = sockaddr_port((sockaddr_u*)hio_peeraddr(io));
     // service
-    http_server_t* server = (http_server_t*)hevent_userdata(io);
-    handler->service = server->service;
+    handler->service = service;
     // ws
-    handler->ws_cbs = server->ws;
+    handler->ws_service = server->ws;
     // FileCache
     handler->files = default_filecache();
     hevent_set_userdata(io, handler);
@@ -357,15 +362,15 @@ int http_server_run(http_server_t* server, int wait) {
 }
 
 int http_server_stop(http_server_t* server) {
+    HttpServerPrivdata* privdata = (HttpServerPrivdata*)server->privdata;
+    if (privdata == NULL) return 0;
+
 #ifdef OS_UNIX
     if (server->worker_processes) {
         signal_handle("stop");
         return 0;
     }
 #endif
-
-    HttpServerPrivdata* privdata = (HttpServerPrivdata*)server->privdata;
-    if (privdata == NULL) return 0;
 
     // wait for all threads started and all loops running
     while (1) {

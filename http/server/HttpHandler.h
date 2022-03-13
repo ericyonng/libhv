@@ -8,8 +8,6 @@
 #include "WebSocketServer.h"
 #include "WebSocketParser.h"
 
-#include "hlog.h"
-
 class WebSocketHandler {
 public:
     WebSocketChannelPtr         channel;
@@ -18,25 +16,19 @@ public:
     uint64_t                    last_recv_pong_time;
 
     WebSocketHandler() {
-        parser.reset(new WebSocketParser);
-        // channel.reset(new WebSocketChannel);
         last_send_ping_time = 0;
         last_recv_pong_time = 0;
     }
 
+    void Init(hio_t* io = NULL, ws_session_type type = WS_SERVER) {
+        parser.reset(new WebSocketParser);
+        if (io) {
+            channel.reset(new hv::WebSocketChannel(io, type));
+        }
+    }
+
     void onopen() {
         channel->status = hv::SocketChannel::CONNECTED;
-        /*
-        channel->onread = [this](hv::Buffer* buf) {
-            const char* data = (const char*)buf->data();
-            int size= buf->size();
-            int nfeed = parser->FeedRecvData(data, size);
-            if (nfeed != size) {
-                hloge("websocket parse error!");
-                channel->close();
-            }
-        };
-        */
     }
 
     void onclose() {
@@ -85,7 +77,7 @@ public:
 
     // for websocket
     WebSocketHandlerPtr         ws;
-    WebSocketServerCallbacks*   ws_cbs;
+    WebSocketService*           ws_service;
 
     HttpHandler() {
         protocol = UNKNOWN;
@@ -93,10 +85,16 @@ public:
         ssl = false;
         service = NULL;
         files = NULL;
-        ws_cbs = NULL;
+        ws_service = NULL;
     }
 
-    bool Init(int http_version = 1) {
+    ~HttpHandler() {
+        if (writer) {
+            writer->status = hv::SocketChannel::DISCONNECTED;
+        }
+    }
+
+    bool Init(int http_version = 1, hio_t* io = NULL) {
         parser.reset(HttpParser::New(HTTP_SERVER, (enum http_version)http_version));
         if (parser == NULL) {
             return false;
@@ -111,6 +109,10 @@ public:
             resp->http_minor = 0;
         }
         parser->InitRequest(req.get());
+        if (io) {
+            writer.reset(new hv::HttpResponseWriter(io, resp));
+            writer->status = hv::SocketChannel::CONNECTED;
+        }
         return true;
     }
 
@@ -133,6 +135,9 @@ public:
         req->Reset();
         resp->Reset();
         parser->InitRequest(req.get());
+        if (writer) {
+            writer->Begin();
+        }
     }
 
     int FeedRecvData(const char* data, size_t len);
@@ -149,21 +154,28 @@ public:
     }
     void WebSocketOnOpen() {
         ws->onopen();
-        if (ws_cbs && ws_cbs->onopen) {
-            ws_cbs->onopen(ws->channel, req->url);
+        if (ws_service && ws_service->onopen) {
+            ws_service->onopen(ws->channel, req->url);
         }
     }
     void WebSocketOnClose() {
         ws->onclose();
-        if (ws_cbs && ws_cbs->onclose) {
-            ws_cbs->onclose(ws->channel);
+        if (ws_service && ws_service->onclose) {
+            ws_service->onclose(ws->channel);
         }
     }
     void WebSocketOnMessage(const std::string& msg) {
-        if (ws_cbs && ws_cbs->onmessage) {
-            ws_cbs->onmessage(ws->channel, msg);
+        if (ws_service && ws_service->onmessage) {
+            ws_service->onmessage(ws->channel, msg);
         }
     }
+
+private:
+    int defaultRequestHandler();
+    int defaultStaticHandler();
+    int defaultErrorHandler();
+    int customHttpHandler(const http_handler& handler);
+    int invokeHttpHandler(const http_handler* handler);
 };
 
 #endif // HV_HTTP_HANDLER_H_

@@ -14,10 +14,19 @@ set(BASE_HEADERS
     base/hthread.h
     base/hmutex.h
     base/hsocket.h
-    base/hssl.h
     base/hlog.h
     base/hbuf.h
+    base/hmain.h
     base/hendian.h
+)
+
+set(SSL_HEADERS
+    ssl/hssl.h
+)
+
+set(EVENT_HEADERS
+    event/hloop.h
+    event/nlog.h
 )
 
 set(UTIL_HEADERS
@@ -26,20 +35,16 @@ set(UTIL_HEADERS
     util/sha1.h
 )
 
-set(EVENT_HEADERS
-    event/hloop.h
-    event/nlog.h
-)
-
 set(CPPUTIL_HEADERS
     cpputil/hmap.h
     cpputil/hstring.h
     cpputil/hfile.h
+    cpputil/hpath.h
     cpputil/hdir.h
     cpputil/hurl.h
-    cpputil/hmain.h
     cpputil/hscope.h
     cpputil/hthreadpool.h
+    cpputil/hasync.h
     cpputil/hobjectpool.h
     cpputil/ifconfig.h
     cpputil/iniparser.h
@@ -50,7 +55,6 @@ set(CPPUTIL_HEADERS
 
 set(EVPP_HEADERS
     evpp/Buffer.h
-    evpp/Callback.h
     evpp/Channel.h
     evpp/Event.h
     evpp/EventLoop.h
@@ -72,8 +76,6 @@ set(PROTOCOL_HEADERS
 
 set(HTTP_HEADERS
     http/httpdef.h
-    http/http2def.h
-    http/grpcdef.h
     http/wsdef.h
     http/http_content.h
     http/HttpMessage.h
@@ -82,14 +84,26 @@ set(HTTP_HEADERS
     http/WebSocketChannel.h
 )
 
+set(HTTP2_HEADERS
+    http/http2def.h
+    http/grpcdef.h
+)
+
 set(HTTP_CLIENT_HEADERS
     http/client/http_client.h
     http/client/requests.h
+    http/client/axios.h
     http/client/WebSocketClient.h)
 
 set(HTTP_SERVER_HEADERS
-    http/server/HttpService.h
     http/server/HttpServer.h
+    http/server/HttpService.h
+    http/server/HttpContext.h
     http/server/HttpResponseWriter.h
     http/server/WebSocketServer.h
+)
+
+set(MQTT_HEADERS
+    mqtt/mqtt_protocol.h
+    mqtt/mqtt_client.h
 )

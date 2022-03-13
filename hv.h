@@ -24,7 +24,6 @@
 #include "hthread.h"
 #include "hmutex.h"
 #include "hsocket.h"
-#include "hssl.h"
 
 #include "hlog.h"
 #include "hbuf.h"
@@ -34,9 +33,9 @@
 #include "hmap.h"       // <map>
 #include "hstring.h"    // <string>
 #include "hfile.h"
+#include "hpath.h"
 #include "hdir.h"
 #include "hurl.h"
-#include "hscope.h"
 #endif
 
 #endif  // HV_H_

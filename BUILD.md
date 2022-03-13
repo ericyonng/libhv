@@ -31,6 +31,8 @@ use cmake
 mkdir win64
 cd win64
 cmake .. -G "Visual Studio 15 2017 Win64"
+#cmake .. -G "Visual Studio 16 2019" -A x64
+#cmake .. -G "Visual Studio 17 2022" -A x64
 cmake --build .
 ```
 
@@ -62,7 +64,7 @@ make clean
 make libhv
 ```
 
-### android
+### Android
 see CROSS_COMPILE
 ```
 #https://developer.android.com/ndk/downloads
@@ -75,6 +77,14 @@ export CROSS_COMPILE=aarch64-linux-android-
 ./configure
 make clean
 make libhv
+```
+
+### iOS
+```
+mkdir build
+cd build
+cmake .. -G Xcode -DCMAKE_TOOLCHAIN_FILE=../cmake/ios.toolchain.cmake -DPLATFORM=OS
+cmake --build . --target hv_static --config Release
 ```
 
 ## targets
@@ -90,14 +100,20 @@ make libhv
 
 ## options
 
-### compile WITH_OPENSSL
-Enable SSL in libhv is so easy, just only two apis:
+### compile without c++
 ```
-// init ssl_ctx, see base/hssl.h
-hssl_ctx_t hssl_ctx_init(hssl_ctx_init_param_t* param);
+./configure --without-evpp
+make clean && make
+```
 
-// enable ssl, see event/hloop.h
-int hio_enable_ssl(hio_t* io);
+### compile WITH_OPENSSL
+Enable SSL/TLS in libhv is so easy :)
+```
+// see ssl/hssl.h
+hssl_ctx_t hssl_ctx_new(hssl_ctx_opt_t* opt);
+
+// see event/hloop.h
+int hio_new_ssl_ctx(hio_t* io, hssl_ctx_opt_t* opt);
 ```
 
 https is the best example.
@@ -125,4 +141,16 @@ sudo apt install libnghttp2-dev # ubuntu
 make clean && make
 bin/httpd -s restart -d
 bin/curl -v http://localhost:8080 --http2
+```
+
+### compile WITH_KCP
+```
+./configure --with-kcp
+make clean && make
+```
+
+### compile WITH_MQTT
+```
+./configure --with-mqtt
+make clean && make
 ```
